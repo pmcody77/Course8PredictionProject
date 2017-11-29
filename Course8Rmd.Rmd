@@ -1,0 +1,66 @@
+---
+title: "ProjectSubmission"
+author: "Preston Cody"
+date: "November 28, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+library(caret)
+```
+
+## Overview
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. In this project, I use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. I found that a random forest modeling method produced the best accuracy.
+
+## Procedures
+
+Step one is to load training and test datasets.  The data for this project come from this source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har
+
+```{r}
+traincsv <- read.csv("D:\\sm\\ml\\Course4\\pml-training.csv")
+testcsv <- read.csv("D:\\sm\\ml\\Course4\\pml-testing.csv")
+```
+
+Step two is to clean the data.  It turns out many of the columns have many NA variables and clutter the dataset.  So any column in the test set with NA should not be used in the model, and I remove those columns from both datasets for prediction.  Apparently, the first 7 variables contain identification information that can be thrown out.  There are also so many variables, Principal Component Analysis is used to trim down the dataset.  I also have to set up a validation set to use to understand what the expected sample error will be.
+
+```{r}
+trainset <- traincsv[, colSums(is.na(testcsv))==0]
+testset <- testcsv[, colSums(is.na(testcsv))==0]
+trainset <- trainset[,-c(1:7)]
+testset <- testset[,-c(1:7)]
+preProc <- preProcess(trainset[,-53], method = "pca", thresh = 0.9)
+trainPCA <- predict(preProc, trainset[,-53])
+testPCA <- predict(preProc, testset[-53])
+trainPCA$classe <- trainset$classe
+
+inTrain <- createDataPartition(trainPCA$classe, p = 0.7)[[1]]
+intrainPCA <- trainPCA[inTrain,]
+invalidPCA <- trainPCA[-inTrain,]
+```
+
+Step three is to train some models.  I control the models with crossvalidation using K-Kold method (k=5).  I train a classification tree, random forest, and gbm model.
+
+```{r}
+crossval=trainControl(method="cv", number=5)
+rpartmod <- train(classe ~ ., data=intrainPCA, method="rpart", trControl=crossval)
+rfmod <- train(classe ~ ., data=intrainPCA, method="rf", trControl=crossval)
+gbmmod <- train(classe ~ ., data=intrainPCA, method="gbm", trControl=crossval, verbose=FALSE)
+```
+
+Step four is to use the models to predict against the validation set and determine which has the best expected sample error.  This analysis shows that for this training set, the random forest approach provides the best accuracy against the validation set.
+
+```{r}
+rpartpred <- predict(rpartmod, invalidPCA)
+rfpred <- predict(rfmod, invalidPCA)
+gbmpred <- predict(gbmmod, invalidPCA)
+
+confusionMatrix(invalidPCA$classe, rpartpred)
+confusionMatrix(invalidPCA$classe, rfpred)
+confusionMatrix(invalidPCA$classe, gbmpred)
+```
+
+## Conclusion
+
+The random forest approach significanly outperforms alternative modeling methods with an accuracy against a validation set of 96.5%
